@@ -15,9 +15,10 @@ def server():
     if not SERVER_BIN.exists():
         pytest.skip(f"Server binary not found at {SERVER_BIN}. Run tools/build_server.sh first.")
     root = _modular_root()
+    env = {**os.environ, 'DYLD_LIBRARY_PATH': f'{root}/lib', 'LD_LIBRARY_PATH': f'{root}/lib'}
     proc = subprocess.Popen(
         [str(SERVER_BIN), root],
-        stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env)
     # Wait for ready
     line = proc.stdout.readline()
     assert line, "Server produced no output"

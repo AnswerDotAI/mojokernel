@@ -1,5 +1,5 @@
 """Expression evaluation tests through the REPL server binary."""
-import json,subprocess,pytest
+import json,os,subprocess,pytest
 from pathlib import Path
 
 BUILD_DIR = Path(__file__).resolve().parents[1] / "build"
@@ -17,9 +17,10 @@ def server():
     bin = _server_bin()
     if not bin: pytest.skip("Server binary not found")
     root = _modular_root()
+    env = {**os.environ, 'DYLD_LIBRARY_PATH': f'{root}/lib', 'LD_LIBRARY_PATH': f'{root}/lib'}
     proc = subprocess.Popen(
         [str(bin), root],
-        stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env)
     line = proc.stdout.readline()
     assert json.loads(line)['status'] == 'ready'
     yield proc

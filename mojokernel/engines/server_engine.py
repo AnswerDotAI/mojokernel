@@ -27,12 +27,15 @@ class ServerEngine:
         if not server_bin:
             raise FileNotFoundError("mojo-repl-server not found. Run tools/build_server.sh first.")
         root = _find_modular_root()
+        lib_dir = os.path.join(root, 'lib')
         env = dict(os.environ)
         env.update({
             'MODULAR_MAX_PACKAGE_ROOT': root,
             'MODULAR_MOJO_MAX_PACKAGE_ROOT': root,
             'MODULAR_MOJO_MAX_DRIVER_PATH': os.path.join(root, 'bin', 'mojo'),
             'MODULAR_MOJO_MAX_IMPORT_PATH': os.path.join(root, 'lib', 'mojo'),
+            'DYLD_LIBRARY_PATH': lib_dir,
+            'LD_LIBRARY_PATH': lib_dir,
         })
         self.proc = subprocess.Popen(
             [server_bin, root],

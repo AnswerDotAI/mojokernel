@@ -2,7 +2,7 @@
 """Send code to the server and print responses.
 Usage: tools/server_exec.py 'print(42)' 'var x = 1' 'print(x)'
 """
-import json,subprocess,sys
+import json,os,subprocess,sys
 from pathlib import Path
 
 def main():
@@ -13,9 +13,10 @@ def main():
     server_bin = root / "build" / "mojo-repl-server"
     from mojo._package_root import get_package_root
     modular_root = get_package_root()
+    env = {**os.environ, 'DYLD_LIBRARY_PATH': f'{modular_root}/lib', 'LD_LIBRARY_PATH': f'{modular_root}/lib'}
     proc = subprocess.Popen(
         [str(server_bin), modular_root],
-        stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env)
     ready = json.loads(proc.stdout.readline())
     assert ready['status'] == 'ready', f"Server not ready: {ready}"
     for i, code in enumerate(sys.argv[1:], 1):
