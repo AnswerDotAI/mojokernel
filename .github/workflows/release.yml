@@ -25,14 +25,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v7
+        with:
+          python-version: "3.12"
 
       - name: Install Mojo
         run: |
-          uv pip install --system modular --extra-index-url https://modular.gateway.scarf.sh/simple/
+          uv venv
+          uv pip install modular --extra-index-url https://modular.gateway.scarf.sh/simple/
+          echo "$PWD/.venv/bin" >> $GITHUB_PATH
           mojo --version
 
       - name: Install dependencies
-        run: uv pip install --system ".[dev]"
+        run: uv sync --dev
 
       - name: Install LLVM
         run: |
@@ -80,9 +84,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v7
+        with:
+          python-version: "3.12"
       - name: Install Mojo
         run: |
-          uv pip install --system modular --extra-index-url https://modular.gateway.scarf.sh/simple/
+          uv venv
+          uv pip install modular --extra-index-url https://modular.gateway.scarf.sh/simple/
+          echo "$PWD/.venv/bin" >> $GITHUB_PATH
           mojo --version
       - run: uv build --sdist -o dist/
       - uses: actions/upload-artifact@v4
