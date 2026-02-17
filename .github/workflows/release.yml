@@ -7,6 +7,10 @@ on:
         description: 'Publish to PyPI'
         type: boolean
         default: false
+      version_suffix:
+        description: 'Version suffix (e.g. .post1) — only needed if PyPI rejects the base version'
+        type: string
+        default: ''
 
 jobs:
   build:
@@ -33,7 +37,7 @@ jobs:
 
       - name: Detect Mojo version
         run: |
-          MOJO_VERSION=$(gh api repos/modular/mojo/releases/latest --jq .tag_name | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')
+          MOJO_VERSION=$(gh api repos/modular/mojo/releases/latest --jq .tag_name | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')${{ inputs.version_suffix }}
           echo "MOJO_VERSION=$MOJO_VERSION" >> $GITHUB_ENV
           echo "Mojo version: $MOJO_VERSION"
         env:
@@ -103,7 +107,7 @@ jobs:
           python-version: "3.12"
       - name: Detect Mojo version
         run: |
-          MOJO_VERSION=$(gh api repos/modular/mojo/releases/latest --jq .tag_name | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')
+          MOJO_VERSION=$(gh api repos/modular/mojo/releases/latest --jq .tag_name | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')${{ inputs.version_suffix }}
           echo "MOJO_VERSION=$MOJO_VERSION" >> $GITHUB_ENV
           echo "Mojo version: $MOJO_VERSION"
         env:
