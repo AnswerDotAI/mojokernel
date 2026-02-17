@@ -1,0 +1,42 @@
+version = 1
+revision = 1
+requires-python = ">=3.12"
+
+[[package]]
+name = "fastcore"
+version = "1.12.14"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/92/b0/c30721504c916c871b1c3d2f209ad0fa9320a26c7e9041436e9231f3aa1d/fastcore-1.12.14.tar.gz", hash = "sha256:09190c46360c57dbba5e6b991df4b5fd6d2720ea4b4959309151d7fe6b2bf520", size = 92366 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/d0/c0/b7fa771dda08001eb004112114094370d6b94b857ed902a32472ed74a8fe/fastcore-1.12.14-py3-none-any.whl", hash = "sha256:19e5adcee3af6f357af4f66954e17f335f208bb9cb422dcdef03d2e9d586eca3", size = 96584 },
+]
+
+[[package]]
+name = "mojokernel"
+version = "0.1.0"
+source = { virtual = "." }
+dependencies = [
+    { name = "safecmd" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "safecmd", specifier = ">=0.1.2" }]
+
+[[package]]
+name = "safecmd"
+version = "0.1.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "fastcore" },
+    { name = "shfmt-py" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/ad/f8/48c5a773a40608b5cf04cbc24b05113c63ff0b17d9829659d9f2e4c6abb6/safecmd-0.1.2.tar.gz", hash = "sha256:7f850378e877230e9df8e4a1114f072b74523dd1acecffc3c5fc6631ebc09ff2", size = 21724 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/db/d4/8dcbd6a3f456d2c7367021fa0b2b48458fb488fdef8be3d5cb29f01bba8e/safecmd-0.1.2-py3-none-any.whl", hash = "sha256:5ca9a1ce0936ed26c13bd2c0c0e1623b4dc2cd4e918d797a7a3c2aa7786e0a32", size = 18981 },
+]
+
+[[package]]
+name = "shfmt-py"
+version = "3.12.0.2"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/af/d9/a1ea26749bd19467e9fbfe7b34e6c8df517e01de4028a45b954eebe8c03b/shfmt_py-3.12.0.2.tar.gz", hash = "sha256:6a0dc675b37d000eb236609cf15aedd9e7a538927ea02c57b617908b6f237e9c", size = 4467 }
