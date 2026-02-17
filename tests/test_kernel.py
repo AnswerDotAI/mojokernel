@@ -1,5 +1,11 @@
-import pytest, time
+import re, pytest, time
 import jupyter_client
+import mojokernel
+
+def test_version():
+    v = mojokernel.__version__
+    assert re.match(r'\d+\.\d+\.\d+\.\d+', v)
+    assert v != '0.0.0.0'
 
 @pytest.fixture(scope='module')
 def kc():

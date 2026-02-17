@@ -3,10 +3,6 @@ name: Build and publish wheels
 on:
   workflow_dispatch:
     inputs:
-      mojo_version:
-        description: 'Mojo version constraint (e.g. ">=25.1,<25.2" or empty for latest)'
-        required: false
-        default: ''
       publish:
         description: 'Publish to PyPI'
         type: boolean
@@ -28,20 +24,13 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v7
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
-      - name: Install Mojo
+      - name: Install dependencies
         run: |
-          pip install modular --extra-index-url https://modular.gateway.scarf.sh/simple/
-          if [ -n "${{ inputs.mojo_version }}" ]; then
-            pip install "modular${{ inputs.mojo_version }}" --extra-index-url https://modular.gateway.scarf.sh/simple/
-          fi
+          uv pip install --system ".[dev]" --extra-index-url https://modular.gateway.scarf.sh/simple/
           echo "--- Mojo version ---"
-          python3 -c "from mojo._package_root import get_package_root; print('MODULAR_ROOT:', get_package_root())"
-          mojo --version || echo "mojo CLI not on PATH (ok if using pip install)"
+          mojo --version
 
       - name: Install LLVM
         run: |
@@ -63,13 +52,13 @@ jobs:
           fi
 
       - name: Build wheel
-        run: pip wheel . --no-deps -w dist/
+        run: uv build --wheel -o dist/
 
       - name: Verify wheel
         run: |
           ls -lh dist/*.whl
           python3 -c "
-          import zipfile, sys
+          import zipfile
           whl = sorted(__import__('glob').glob('dist/*.whl'))[0]
           print('Wheel:', whl)
           with zipfile.ZipFile(whl) as z:
@@ -88,11 +77,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-      - run: pip install build
-      - run: python -m build --sdist -o dist/
+      - uses: astral-sh/setup-uv@v7
+      - run: uv build --sdist -o dist/
       - uses: actions/upload-artifact@v4
         with:
           name: sdist

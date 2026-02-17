@@ -4,9 +4,17 @@ A Jupyter kernel for [Mojo](https://www.modular.com/mojo). Supports full variabl
 
 ## Install
 
-Requires Mojo to be installed. Install the wheel matching your Mojo version:
+We recommend [uv](https://docs.astral.sh/uv/) which handles the Mojo package index automatically:
 
 ```bash
+uv pip install mojokernel
+mojokernel install --sys-prefix
+```
+
+With pip, install Mojo first (it's hosted on a separate index that pip can't discover automatically):
+
+```bash
+pip install modular --extra-index-url https://modular.gateway.scarf.sh/simple/
 pip install mojokernel
 mojokernel install --sys-prefix
 ```
@@ -42,29 +50,27 @@ mojokernel wheels are built against a specific Mojo version. Install the version
 
 ```bash
 # Check your Mojo version
-mojo --version          # e.g. "Mojo 0.26.2.0.dev2026021605 (eb42a2ba)"
+mojo --version          # e.g. "Mojo 0.26.1.0 (156d3ac6)"
 
 # Install matching mojokernel
-pip install mojokernel==0.26.2
+uv pip install mojokernel==0.26.1.0
 ```
 
 ### Publishing a new release
 
+The wheel version is determined automatically from `mojo --version` at build time (via `mojokernel/_version.py`). No manual version bumping needed.
+
 When Mojo publishes a new version:
 
-1. Get the Mojo version: `mojo --version | grep -oE '[0-9]+\.[0-9]+\.[0-9]+'`
-2. Update `version` in `pyproject.toml` to match (e.g. `0.26.2`)
-3. Commit and push
-4. Go to Actions > "Build and publish wheels" > Run workflow
-   - Set `publish: true` to upload to PyPI
-   - Optionally set a `mojo_version` constraint to pin the CI install
+1. Go to Actions > "Build and publish wheels" > Run workflow
+2. Set `publish: true` to upload to PyPI
 
-Platform wheels are built for macOS (Apple Silicon) and Linux (x86_64).
+The CI installs the latest Mojo, builds the C++ server, and produces platform wheels tagged with the detected Mojo version. Wheels are built for macOS (Apple Silicon) and Linux (x86_64).
 
 ## Testing
 
 ```bash
-pip install -e .
+uv pip install -e .
 pytest -q
 ```
 
