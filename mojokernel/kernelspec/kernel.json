@@ -1,0 +1,5 @@
+{
+  "argv": ["python3", "-m", "mojokernel", "-f", "{connection_file}"],
+  "display_name": "Mojo",
+  "language": "mojo"
+}
