@@ -80,6 +80,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v7
+      - name: Install Mojo
+        run: |
+          uv pip install --system modular --extra-index-url https://modular.gateway.scarf.sh/simple/
+          mojo --version
       - run: uv build --sdist -o dist/
       - uses: actions/upload-artifact@v4
         with:
