@@ -2,6 +2,8 @@
 
 A Jupyter kernel for [Mojo](https://www.modular.com/mojo). Supports full variable persistence, function/struct definitions, and error handling across notebook cells.
 
+**NB**: This is *not* an official Modular project. It's created by Jeremy Howard from Answer.AI and uses undocumented private symbols from mojo in ways that might turn out to be flaky or disappear in a future version. If Modular releases an official kernel that provides the same functionality, we'll archive this one and update these docs to point at that instead.
+
 ## Install
 
 We recommend [uv](https://docs.astral.sh/uv/) which handles the Mojo package index automatically:

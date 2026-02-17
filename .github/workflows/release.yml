@@ -17,8 +17,11 @@ jobs:
             llvm_install: brew install llvm
             llvm_include: /opt/homebrew/opt/llvm/include
             llvm_lib: /opt/homebrew/opt/llvm/lib
-          - os: ubuntu-latest
-            llvm_install: sudo apt-get update && sudo apt-get install -y llvm-18-dev liblldb-18-dev
+          - os: ubuntu-22.04
+            llvm_install: >-
+              wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo tee /etc/apt/trusted.gpg.d/llvm.asc &&
+              echo "deb http://apt.llvm.org/jammy/ llvm-toolchain-jammy-18 main" | sudo tee /etc/apt/sources.list.d/llvm-18.list &&
+              sudo apt-get update && sudo apt-get install -y llvm-18-dev liblldb-18-dev
             llvm_include: /usr/lib/llvm-18/include
             llvm_lib: /usr/lib/llvm-18/lib
     runs-on: ${{ matrix.os }}
@@ -118,12 +121,30 @@ jobs:
     environment: pypi
     permissions:
       id-token: write
+      contents: write
     steps:
       - uses: actions/download-artifact@v4
         with:
           path: dist/
           merge-multiple: true
       - run: ls -lh dist/
+
+      - name: Detect version from artifacts
+        run: |
+          VERSION=$(ls dist/*.whl | head -1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "Version: $VERSION"
+
       - uses: pypa/gh-action-pypi-publish@release/v1
         with:
           packages-dir: dist/
+
+      - name: Create GitHub release
+        run: |
+          gh release create "v$VERSION" dist/* \
+            --title "mojokernel $VERSION" \
+            --notes "mojokernel $VERSION — built for Mojo $VERSION.
+
+          Install: \`uv pip install mojokernel==$VERSION\`"
+        env:
+          GH_TOKEN: ${{ github.token }}
