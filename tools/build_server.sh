@@ -17,23 +17,23 @@ echo "MODULAR_ROOT=$MODULAR_ROOT"
 echo "LLDB_LIB=$LLDB_LIB"
 
 mkdir -p build
-BASE="-std=c++17 -I$LLVM_INCLUDE -L$MODULAR_ROOT/lib -l$LLDB_LIB"
-LLVM_LIBS="-L$LLVM_LIB -lLLVMSupport -lLLVMDemangle"
+CFLAGS="-std=c++17 -I$LLVM_INCLUDE"
+LDFLAGS="-L$MODULAR_ROOT/lib -l$LLDB_LIB -L$LLVM_LIB -lLLVMSupport -lLLVMDemangle"
 
-c++ $BASE $LLVM_LIBS -o build/mojo-repl-server server/repl_server.cpp
+c++ $CFLAGS server/repl_server.cpp $LDFLAGS -o build/mojo-repl-server
 echo "Built build/mojo-repl-server"
 
 mkdir -p mojokernel/bin
 cp build/mojo-repl-server mojokernel/bin/
 echo "Copied to mojokernel/bin/"
 
-c++ $BASE -o build/mojo-repl server/mojo_repl.cpp
+c++ $CFLAGS server/mojo_repl.cpp -L$MODULAR_ROOT/lib -l$LLDB_LIB -o build/mojo-repl
 echo "Built build/mojo-repl"
 
-c++ $BASE -o build/mojo-repl-server-pty server/repl_server_pty.cpp
+c++ $CFLAGS server/repl_server_pty.cpp -L$MODULAR_ROOT/lib -l$LLDB_LIB -o build/mojo-repl-server-pty
 echo "Built build/mojo-repl-server-pty"
 
 if [ -f server/test_jupyter_lib.cpp ]; then
-    c++ $BASE -o build/test-jupyter-lib server/test_jupyter_lib.cpp
+    c++ $CFLAGS server/test_jupyter_lib.cpp -L$MODULAR_ROOT/lib -l$LLDB_LIB -o build/test-jupyter-lib
     echo "Built build/test-jupyter-lib"
 fi
