@@ -1,6 +1,6 @@
 #!/bin/bash
 cd "$(dirname "$0")/.."
-MODULAR_ROOT="$(.venv/bin/python3 -c 'from mojo._package_root import get_package_root; print(get_package_root())')"
+MODULAR_ROOT="$(.venv/bin/python -c 'from mojo._package_root import get_package_root; print(get_package_root())')"
 echo "Modular root: $MODULAR_ROOT"
 echo "Mojo version: $("$MODULAR_ROOT/bin/mojo" --version 2>&1)"
 echo ""

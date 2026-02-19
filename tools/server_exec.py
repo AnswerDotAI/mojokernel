@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 """Send code to the server and print responses.
 Usage: tools/server_exec.py 'print(42)' 'var x = 1' 'print(x)'
 """

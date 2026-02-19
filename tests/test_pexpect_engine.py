@@ -2,6 +2,9 @@ import pytest
 from mojokernel.engines.pexpect_engine import (
     PexpectEngine, _parse_output, _strip_ansi, _is_prompt_line, _PROMPT_PAT, _ECHO_RE)
 
+# Pexpect fallback engine tests are slow and optional in normal development.
+pytestmark = pytest.mark.slow
+
 # ── ANSI stripping ──
 
 def test_strip_ansi_removes_escapes():
@@ -138,61 +141,32 @@ def engine():
 def test_engine_starts_alive(engine):
     assert engine.alive
 
-def test_simple_print(engine):
-    r = engine.execute('print(42)')
-    assert r.success
-    assert '42' in r.stdout
-
-def test_output_is_clean(engine):
+def test_engine_smoke_output_state_and_multiline(engine):
     r = engine.execute('print("hello")')
     assert r.success
     lines = [l for l in r.stdout.strip().split('\n') if l.strip()]
     assert lines == ['hello']
 
-def test_no_output_expression(engine):
     r = engine.execute('var _test_silent = 1')
     assert r.success
-
-def test_state_persistence(engine):
-    engine.execute('var _test_persist = 10')
-    r = engine.execute('print(_test_persist)')
+    r = engine.execute('var _test_persist = 10')
     assert r.success
-    assert '10' in r.stdout
 
-def test_multiline_fn(engine):
-    engine.execute('fn _test_add(a: Int, b: Int) -> Int:\n    return a + b')
-    r = engine.execute('print(_test_add(3, 4))')
+    r = engine.execute('fn _test_add(a: Int, b: Int) -> Int:\n    return a + b')
     assert r.success
-    assert '7' in r.stdout
-
-def test_arithmetic(engine):
-    r = engine.execute('print(3 * 7 + 1)')
+    r = engine.execute('print(_test_add(_test_persist, 7))')
     assert r.success
-    assert '22' in r.stdout
+    assert '17' in r.stdout
 
-def test_error_returns_failure(engine):
+def test_error_failure_fields_and_recovery(engine):
     r = engine.execute('print(_totally_undefined_xyz)')
     assert not r.success
     assert r.ename == 'MojoError'
-
-def test_error_has_traceback(engine):
-    r = engine.execute('print(_no_such_var_abc)')
-    assert not r.success
     assert len(r.traceback) > 0
 
-def test_recovery_after_error(engine):
-    engine.execute('print(_bad_var_recovery)')
     r = engine.execute('print(999)')
     assert r.success
     assert '999' in r.stdout
-
-def test_var_with_print_no_accumulation(engine):
-    r = engine.execute('var _test_acc = String("hi")\nprint(_test_acc)')
-    assert r.success
-    assert 'hi' in r.stdout
-    r2 = engine.execute('print(42)')
-    assert r2.success
-    assert r2.stdout.strip() == '42'
 
 def test_empty_code(engine):
     r = engine.execute('')

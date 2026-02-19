@@ -158,6 +158,22 @@ PTY data arrives in chunks. The prompt pattern might appear in the middle of a c
 
 The parser scans for lines containing `error:` (case-insensitive). Once found, all subsequent lines are treated as error output. This matches how the Mojo compiler reports errors through the REPL.
 
+### Testing note
+
+`tests/test_pexpect_engine.py` is marked `@pytest.mark.slow`.
+
+The pexpect fallback engine is not currently our active execution path, so normal development test runs should skip these tests:
+
+```bash
+tools/test.sh
+```
+
+Run them only when explicitly working on fallback behavior:
+
+```bash
+INCLUDE_SLOW=1 tools/test.sh -m slow
+```
+
 ## PTY server backup (`server/repl_server_pty.cpp`)
 
 This is a C++ version of the pexpect approach. It:

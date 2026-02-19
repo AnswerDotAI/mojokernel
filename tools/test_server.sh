@@ -3,7 +3,7 @@
 # Each test is a small binary in server/tests/ that exits 0 on success.
 set -e
 cd "$(dirname "$0")/.."
-MODULAR_ROOT="$(.venv/bin/python3 -c 'from mojo._package_root import get_package_root; print(get_package_root())')"
+MODULAR_ROOT="$(.venv/bin/python -c 'from mojo._package_root import get_package_root; print(get_package_root())')"
 LLVM_INCLUDE="${LLVM_INCLUDE:-/path/to/llvm/include}"
 
 mkdir -p build/tests

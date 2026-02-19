@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 """Test the PTY-based REPL server for var persistence and basic functionality."""
 import subprocess, json, sys, time
 

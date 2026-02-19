@@ -34,6 +34,7 @@ mojokernel = ["kernelspec/*.json", "bin/*"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 filterwarnings = ["ignore:.*use of forkpty.*:DeprecationWarning"]
+markers = ["slow: long-running or optional tests (e.g. pexpect fallback engine)"]
 
 [project.scripts]
 mojokernel = "mojokernel.__main__:main"

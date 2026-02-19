@@ -51,28 +51,28 @@ def _run(kc, code, timeout=15):
 
 # -- Kernel output --
 
-def test_kernel_print(kc):
+def test_kernel_smoke_output_state_and_multiline(kc):
     stdout, errors = _run(kc, 'print(42)')
     assert '42' in stdout
     assert not errors
 
-def test_kernel_output_clean(kc):
     stdout, _ = _run(kc, 'print("clean")')
     assert 'clean' in stdout
     assert '>' not in stdout
 
-def test_kernel_state_persists(kc):
     _run(kc, 'var _ktest_v = 77')
     stdout, _ = _run(kc, 'print(_ktest_v)')
     assert '77' in stdout
 
-def test_kernel_error(kc):
+    _run(kc, 'fn _ktest_sq(n: Int) -> Int:\n    return n * n')
+    stdout, _ = _run(kc, 'print(_ktest_sq(5))')
+    assert '25' in stdout
+
+def test_kernel_error_and_recovery(kc):
     _, errors = _run(kc, 'print(_ktest_undefined)')
     assert len(errors) == 1
     assert errors[0]['ename'] == 'MojoError'
 
-def test_kernel_recovery_after_error(kc):
-    _run(kc, 'print(_ktest_bad)')
     stdout, errors = _run(kc, 'print(123)')
     assert '123' in stdout
     assert not errors
@@ -81,8 +81,3 @@ def test_kernel_empty_code(kc):
     stdout, errors = _run(kc, '')
     assert stdout == ''
     assert not errors
-
-def test_kernel_multiline(kc):
-    _run(kc, 'fn _ktest_sq(n: Int) -> Int:\n    return n * n')
-    stdout, _ = _run(kc, 'print(_ktest_sq(5))')
-    assert '25' in stdout

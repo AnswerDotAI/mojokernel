@@ -3,7 +3,7 @@
 # Prints server stderr for diagnostics on failure.
 set -e
 cd "$(dirname "$0")/.."
-MODULAR_ROOT="$(.venv/bin/python3 -c 'from mojo._package_root import get_package_root; print(get_package_root())')"
+MODULAR_ROOT="$(.venv/bin/python -c 'from mojo._package_root import get_package_root; print(get_package_root())')"
 
 STDERR_LOG=$(mktemp)
 trap "rm -f $STDERR_LOG" EXIT
