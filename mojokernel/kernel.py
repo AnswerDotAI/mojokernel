@@ -1,7 +1,7 @@
 import os
 from pathlib import Path
 from ipykernel.kernelbase import Kernel
-from .lsp_client import MojoLSPClient, completion_matches, hover_text, identifier_span
+from .lsp_client import MojoLSPClient, completion_matches, completion_metadata, hover_text, identifier_span, signature_text
 
 
 class MojoKernel(Kernel):
@@ -57,21 +57,30 @@ class MojoKernel(Kernel):
         if not self.lsp: return dict(status='ok', matches=[], cursor_start=start, cursor_end=end, metadata={})
         text = self._lsp_preamble + code
         pos = len(self._lsp_preamble) + cursor_pos
-        try: matches = completion_matches(self.lsp.complete(text, pos))
+        metadata = {}
+        try:
+            payload = self.lsp.complete(text, pos)
+            matches = completion_matches(payload)
+            typed = completion_metadata(payload, start, end)
+            if typed: metadata = dict(_jupyter_types_experimental=typed)
         except Exception as e:
             self.log.debug(f"Completion failed: {e}")
             matches = []
-        return dict(status='ok', matches=matches, cursor_start=start, cursor_end=end, metadata={})
+        return dict(status='ok', matches=matches, cursor_start=start, cursor_end=end, metadata=metadata)
 
     def do_inspect(self, code, cursor_pos, detail_level=0, omit_sections=()):
         cursor_pos = len(code) if cursor_pos is None else cursor_pos
         if not self.lsp: return dict(status='ok', found=False, data={}, metadata={})
         text = self._lsp_preamble + code
         pos = len(self._lsp_preamble) + cursor_pos
-        try: txt = hover_text(self.lsp.hover(text, pos))
-        except Exception as e:
-            self.log.debug(f"Inspect failed: {e}")
-            txt = ''
+        txt = ''
+        try: txt = signature_text(self.lsp.signature_help(text, pos))
+        except Exception as e: self.log.debug(f"Signature help failed: {e}")
+        if not txt:
+            try: txt = hover_text(self.lsp.hover(text, pos))
+            except Exception as e:
+                self.log.debug(f"Inspect failed: {e}")
+                txt = ''
         if not txt: return dict(status='ok', found=False, data={}, metadata={})
         return dict(status='ok', found=True, data={'text/plain': txt}, metadata={})
 

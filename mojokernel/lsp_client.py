@@ -35,24 +35,51 @@ def identifier_span(text, cursor_pos):
     return start, end
 
 
+def _completion_items(payload):
+    if isinstance(payload, dict): return payload.get('items') or []
+    if isinstance(payload, list): return payload
+    return []
+
+
+def _completion_text(item):
+    if not isinstance(item, dict): return None
+    text = None
+    if isinstance(item.get('textEdit'), dict): text = item['textEdit'].get('newText')
+    if not text: text = item.get('insertText')
+    if not text: text = item.get('label')
+    if not isinstance(text, str): return None
+    text = text.strip()
+    if not text: return None
+    return text.splitlines()[0]
+
+
+_kind_to_jupyter_type = {2: 'function', 3: 'function', 4: 'function', 5: 'property', 6: 'instance', 7: 'class', 8: 'class', 9: 'module', 10: 'property', 12: 'instance', 14: 'keyword', 17: 'path', 19: 'path', 22: 'class', 24: 'keyword'}
+def _completion_type(kind): return _kind_to_jupyter_type.get(kind, 'text') if isinstance(kind, int) else 'text'
+
+
 def completion_matches(payload):
-    if isinstance(payload, dict): items = payload.get('items') or []
-    elif isinstance(payload, list): items = payload
-    else: items = []
+    items = _completion_items(payload)
     res, seen = [], set()
     for item in items:
-        if not isinstance(item, dict): continue
-        text = None
-        if isinstance(item.get('textEdit'), dict): text = item['textEdit'].get('newText')
-        if not text: text = item.get('insertText')
-        if not text: text = item.get('label')
-        if not isinstance(text, str): continue
-        text = text.strip()
+        text = _completion_text(item)
         if not text: continue
-        text = text.splitlines()[0]
         if text in seen: continue
         seen.add(text)
         res.append(text)
+    return res
+
+
+def completion_metadata(payload, start, end):
+    items = _completion_items(payload)
+    res, seen = [], set()
+    for item in items:
+        text = _completion_text(item)
+        if not text or text in seen: continue
+        seen.add(text)
+        entry = dict(start=start, end=end, text=text, type=_completion_type(item.get('kind')))
+        detail = item.get('detail')
+        if isinstance(detail, str) and detail.strip(): entry['signature'] = detail.strip()
+        res.append(entry)
     return res
 
 
@@ -70,6 +97,26 @@ def hover_text(payload):
             elif isinstance(o, dict) and isinstance(o.get('value'), str): vals.append(o['value'])
         return '\n\n'.join(o.strip() for o in vals if o and o.strip())
     return ''
+
+
+def signature_text(payload):
+    if not isinstance(payload, dict): return ''
+    sigs = payload.get('signatures')
+    if not isinstance(sigs, list) or not sigs: return ''
+    sidx = payload.get('activeSignature')
+    if not isinstance(sidx, int) or not 0 <= sidx < len(sigs): sidx = 0
+    sig = sigs[sidx]
+    if not isinstance(sig, dict): return ''
+    label = sig.get('label')
+    if not isinstance(label, str) or not label.strip(): return ''
+    text = label.strip()
+    pidx = payload.get('activeParameter')
+    params = sig.get('parameters')
+    if isinstance(pidx, int) and isinstance(params, list) and 0 <= pidx < len(params):
+        p = params[pidx]
+        pl = p.get('label') if isinstance(p, dict) else None
+        if isinstance(pl, str) and pl.strip(): text += f"\n\nactive parameter: {pl.strip()}"
+    return text
 
 
 class _Pending:
@@ -201,6 +248,12 @@ class MojoLSPClient:
         line, char = offset_to_lsp_position(text, cursor_offset)
         params = dict(textDocument=dict(uri=self._doc_uri), position=dict(line=line, character=char))
         return self._request('textDocument/hover', params, timeout=timeout)
+
+    def signature_help(self, text, cursor_offset, timeout=None):
+        self.update_document(text)
+        line, char = offset_to_lsp_position(text, cursor_offset)
+        params = dict(textDocument=dict(uri=self._doc_uri), position=dict(line=line, character=char))
+        return self._request('textDocument/signatureHelp', params, timeout=timeout)
 
     def _join_thread(self, t):
         if not t or t is threading.current_thread(): return

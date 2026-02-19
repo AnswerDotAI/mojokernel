@@ -1,3 +1,4 @@
+kgen.*
 .tmp-home/
 uv.lock
 tests/test_gateway_e2e.py

@@ -1,5 +1,8 @@
 import sys, time, pytest
-from mojokernel.lsp_client import MojoLSPClient, completion_matches, hover_text, identifier_span, offset_to_lsp_position, lsp_position_to_offset
+from mojokernel.lsp_client import (
+    MojoLSPClient, completion_matches, completion_metadata, hover_text, identifier_span, lsp_position_to_offset,
+    offset_to_lsp_position, signature_text,
+)
 
 
 def _fake_lsp_cmd():
@@ -36,9 +39,23 @@ while True:
     elif method == "shutdown":
         send({"jsonrpc": "2.0", "id": mid, "result": None})
     elif method == "textDocument/completion":
-        send({"jsonrpc": "2.0", "id": mid, "result": {"isIncomplete": False, "items": [{"label": "print"}, {"insertText": "println"}]}})
+        send({
+            "jsonrpc": "2.0", "id": mid, "result": {
+                "isIncomplete": False, "items": [
+                    {"label": "print", "kind": 3, "detail": "print(value: Any)"},
+                    {"insertText": "println", "kind": 3},
+                ],
+            },
+        })
     elif method == "textDocument/hover":
         send({"jsonrpc": "2.0", "id": mid, "result": {"contents": {"kind": "markdown", "value": "hover-info"}}})
+    elif method == "textDocument/signatureHelp":
+        send({
+            "jsonrpc": "2.0", "id": mid, "result": {
+                "signatures": [{"label": "print(value: Any)", "parameters": [{"label": "value: Any"}]}],
+                "activeSignature": 0, "activeParameter": 0,
+            },
+        })
     elif method == "exit":
         break
 '''
@@ -55,8 +72,11 @@ def test_lsp_client_round_trip_and_restart():
     assert c.is_running
     payload = c.complete('pri', 3)
     assert completion_matches(payload) == ['print', 'println']
+    assert completion_metadata(payload, 0, 3)[0] == dict(start=0, end=3, text='print', type='function', signature='print(value: Any)')
     txt = hover_text(c.hover('x', 1))
     assert txt == 'hover-info'
+    sig = signature_text(c.signature_help('print(', 6))
+    assert sig == 'print(value: Any)\n\nactive parameter: value: Any'
     c.restart()
     assert c.is_running
     assert c.pid != pid1
