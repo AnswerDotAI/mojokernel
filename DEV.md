@@ -174,6 +174,21 @@ Run them only when explicitly working on fallback behavior:
 INCLUDE_SLOW=1 tools/test.sh -m slow
 ```
 
+### Debug exploration tools
+
+Use these scripts to capture reproducible behavior snapshots for offline debugging:
+
+```bash
+tools/explore_lsp.py
+tools/explore_kernel_client.py
+```
+
+Each writes a timestamped JSON report under `meta/` with raw request/response payloads.
+
+`MojoLSPClient` sets `MODULAR_PROFILE_FILENAME` to a temp path by default, so LSP profiling artifacts don't land in the project directory. Set `MODULAR_PROFILE_FILENAME` explicitly to override this.
+
+For live kernel diagnostics, set `MOJO_KERNEL_LSP_DIAG=1` before starting Jupyter. Completion replies will include `_mojokernel_debug` metadata (per-stage success/failure, elapsed ms, and LSP health snapshot on errors), and kernel logs will include LSP warning details/restarts. If needed, tune LSP request timeout with `MOJO_LSP_REQUEST_TIMEOUT` (seconds).
+
 ## PTY server backup (`server/repl_server_pty.cpp`)
 
 This is a C++ version of the pexpect approach. It:

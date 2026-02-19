@@ -1,4 +1,4 @@
-import json, os, shutil, subprocess, sys, threading
+import json, os, shutil, subprocess, sys, tempfile, threading
 from collections import deque
 from pathlib import Path
 
@@ -57,24 +57,28 @@ _kind_to_jupyter_type = {2: 'function', 3: 'function', 4: 'function', 5: 'proper
 def _completion_type(kind): return _kind_to_jupyter_type.get(kind, 'text') if isinstance(kind, int) else 'text'
 
 
-def completion_matches(payload):
+def completion_matches(payload, prefix=''):
     items = _completion_items(payload)
+    prefix = prefix or ''
     res, seen = [], set()
     for item in items:
         text = _completion_text(item)
         if not text: continue
+        if prefix and not text.startswith(prefix): continue
         if text in seen: continue
         seen.add(text)
         res.append(text)
     return res
 
 
-def completion_metadata(payload, start, end):
+def completion_metadata(payload, start, end, prefix=''):
     items = _completion_items(payload)
+    prefix = prefix or ''
     res, seen = [], set()
     for item in items:
         text = _completion_text(item)
         if not text or text in seen: continue
+        if prefix and not text.startswith(prefix): continue
         seen.add(text)
         entry = dict(start=start, end=end, text=text, type=_completion_type(item.get('kind')))
         detail = item.get('detail')
@@ -119,6 +123,22 @@ def signature_text(payload):
     return text
 
 
+def _sync_change_kind(capabilities):
+    if not isinstance(capabilities, dict): return 0
+    tds = capabilities.get('textDocumentSync')
+    if isinstance(tds, int): return tds
+    if isinstance(tds, dict):
+        ch = tds.get('change')
+        if isinstance(ch, int): return ch
+    return 0
+
+
+def _is_invalid_request_error(e):
+    if not isinstance(e, LSPError): return False
+    d = e.args[0] if e.args else None
+    return isinstance(d, dict) and d.get('code') == -32600
+
+
 class _Pending:
     def __init__(self):
         self.event = threading.Event()
@@ -146,13 +166,18 @@ class MojoLSPClient:
         self._doc_text = ''
         self._doc_version = 0
         self._doc_open = False
+        self._supports_did_change = False
         self._stderr_tail = deque(maxlen=20)
+        self._last_reader_error = ''
 
     @property
     def pid(self): return None if not self._proc else self._proc.pid
 
     @property
     def is_running(self): return bool(self._proc and self._proc.poll() is None)
+
+    @property
+    def reader_alive(self): return bool(self._reader and self._reader.is_alive())
 
     def _log(self, msg):
         if not self.logger: return
@@ -172,11 +197,21 @@ class MojoLSPClient:
         for o in self.include_dirs: cmd += ['-I', o]
         return cmd
 
+    def _tmp_profile_base(self):
+        d = Path(tempfile.gettempdir())/'mojokernel'
+        d.mkdir(parents=True, exist_ok=True)
+        return str(d/'kgen.trace.json')
+
+    def _build_env(self):
+        env = os.environ.copy()
+        if self.env: env.update(self.env)
+        env.setdefault('MODULAR_PROFILE_FILENAME', self._tmp_profile_base())
+        return env
+
     def start(self):
         if self.is_running: return
         cmd = self._build_cmd()
-        env = os.environ.copy()
-        if self.env: env.update(self.env)
+        env = self._build_env()
         self._proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, bufsize=0, env=env)
         self._reader = threading.Thread(target=self._reader_loop, name='mojo-lsp-reader', daemon=True)
         self._stderr_reader = threading.Thread(target=self._stderr_loop, name='mojo-lsp-stderr', daemon=True)
@@ -184,7 +219,9 @@ class MojoLSPClient:
         self._stderr_reader.start()
         try:
             params = dict(processId=os.getpid(), rootUri=self.root_uri, capabilities={}, clientInfo=dict(name='mojokernel', version='0'))
-            self._request('initialize', params, timeout=self.request_timeout)
+            init = self._request('initialize', params, timeout=self.request_timeout)
+            caps = init.get('capabilities') if isinstance(init, dict) else {}
+            self._supports_did_change = _sync_change_kind(caps) in (1, 2)
             self._notify('initialized', {})
         except Exception:
             self.shutdown()
@@ -193,6 +230,24 @@ class MojoLSPClient:
     def restart(self):
         self.shutdown()
         self.start()
+
+    def debug_state(self):
+        proc = self._proc
+        with self._pending_lock: pending = len(self._pending)
+        return dict(
+            is_running=self.is_running,
+            pid=self.pid,
+            returncode=None if not proc else proc.poll(),
+            reader_alive=self.reader_alive,
+            stderr_reader_alive=bool(self._stderr_reader and self._stderr_reader.is_alive()),
+            pending=pending,
+            doc_open=self._doc_open,
+            doc_version=self._doc_version,
+            doc_len=len(self._doc_text),
+            supports_did_change=self._supports_did_change,
+            last_reader_error=self._last_reader_error,
+            stderr_tail=list(self._stderr_tail)[-6:],
+        )
 
     def shutdown(self):
         proc = self._proc
@@ -216,44 +271,64 @@ class MojoLSPClient:
             self._doc_open = False
             self._doc_text = ''
             self._doc_version = 0
+            self._supports_did_change = False
+            self._last_reader_error = ''
             self._fail_pending(RuntimeError("LSP client shut down"))
             self._join_thread(self._reader)
             self._join_thread(self._stderr_reader)
             self._reader = None
             self._stderr_reader = None
 
-    def update_document(self, text):
-        if not self.is_running: self.start()
-        text = text or ''
-        if not self._doc_open:
-            self._doc_open = True
-            self._doc_version = 1
-            self._doc_text = text
-            td = dict(uri=self._doc_uri, languageId='mojo', version=self._doc_version, text=text)
-            self._notify('textDocument/didOpen', dict(textDocument=td))
-            return
-        if text == self._doc_text: return
+    def _did_open(self, text):
+        self._doc_open = True
+        self._doc_version += 1
+        self._doc_text = text
+        td = dict(uri=self._doc_uri, languageId='mojo', version=self._doc_version, text=text)
+        self._notify('textDocument/didOpen', dict(textDocument=td))
+
+    def _did_close(self):
+        if not self._doc_open: return
+        self._notify('textDocument/didClose', dict(textDocument=dict(uri=self._doc_uri)))
+        self._doc_open = False
+
+    def _did_change(self, text):
         self._doc_version += 1
         self._doc_text = text
         self._notify('textDocument/didChange', dict(textDocument=dict(uri=self._doc_uri, version=self._doc_version), contentChanges=[dict(text=text)]))
 
-    def complete(self, text, cursor_offset, timeout=None):
+    def _reopen_document(self, text):
+        self._did_close()
+        self._did_open(text)
+
+    def update_document(self, text):
+        if not self.is_running: self.start()
+        text = text or ''
+        if not self._doc_open:
+            self._did_open(text)
+            return
+        if text == self._doc_text: return
+        if self._supports_did_change: self._did_change(text)
+        else: self._reopen_document(text)
+
+    def _text_document_request(self, method, text, cursor_offset, timeout=None):
         self.update_document(text)
         line, char = offset_to_lsp_position(text, cursor_offset)
         params = dict(textDocument=dict(uri=self._doc_uri), position=dict(line=line, character=char))
-        return self._request('textDocument/completion', params, timeout=timeout)
+        try: return self._request(method, params, timeout=timeout)
+        except Exception as e:
+            if not _is_invalid_request_error(e): raise
+            # Some servers report didChange support but ignore it. Reopen+retry once.
+            self._reopen_document(text)
+            return self._request(method, params, timeout=timeout)
+
+    def complete(self, text, cursor_offset, timeout=None):
+        return self._text_document_request('textDocument/completion', text, cursor_offset, timeout=timeout)
 
     def hover(self, text, cursor_offset, timeout=None):
-        self.update_document(text)
-        line, char = offset_to_lsp_position(text, cursor_offset)
-        params = dict(textDocument=dict(uri=self._doc_uri), position=dict(line=line, character=char))
-        return self._request('textDocument/hover', params, timeout=timeout)
+        return self._text_document_request('textDocument/hover', text, cursor_offset, timeout=timeout)
 
     def signature_help(self, text, cursor_offset, timeout=None):
-        self.update_document(text)
-        line, char = offset_to_lsp_position(text, cursor_offset)
-        params = dict(textDocument=dict(uri=self._doc_uri), position=dict(line=line, character=char))
-        return self._request('textDocument/signatureHelp', params, timeout=timeout)
+        return self._text_document_request('textDocument/signatureHelp', text, cursor_offset, timeout=timeout)
 
     def _join_thread(self, t):
         if not t or t is threading.current_thread(): return
@@ -308,14 +383,20 @@ class MojoLSPClient:
                 self._handle_message(msg)
         except Exception as e: err = e
         finally:
-            if not err and self._stderr_tail: err = RuntimeError('\n'.join(self._stderr_tail))
-            self._fail_pending(err or RuntimeError("LSP reader stopped"))
+            if not err: err = RuntimeError("LSP reader stopped")
+            if self._stderr_tail:
+                tail = '\n'.join(self._stderr_tail)
+                self._log(f"[mojo-lsp] reader stop stderr tail:\n{tail}")
+                if 'LSP reader stopped' in str(err): err = RuntimeError(f"{err}\n{tail}")
+            self._last_reader_error = repr(err)
+            self._fail_pending(err)
 
     def _stderr_loop(self):
         proc = self._proc
         if not proc or not proc.stderr: return
         while True:
-            line = proc.stderr.readline()
+            try: line = proc.stderr.readline()
+            except ValueError: break
             if not line: break
             txt = line.decode('utf-8', errors='replace').rstrip()
             if txt: self._stderr_tail.append(txt)
@@ -326,17 +407,38 @@ class MojoLSPClient:
         if not proc or not proc.stdout: return None
         headers = {}
         while True:
-            line = proc.stdout.readline()
-            if not line: return None
-            if line in (b'\r\n', b'\n'): break
-            if b':' not in line: continue
-            k,v = line.decode('ascii', errors='replace').split(':', 1)
-            headers[k.strip().lower()] = v.strip()
-        n = int(headers.get('content-length', '0'))
-        if n <= 0: return None
-        body = proc.stdout.read(n)
-        if len(body) != n: return None
-        return json.loads(body.decode('utf-8'))
+            headers.clear()
+            while True:
+                line = proc.stdout.readline()
+                if not line: return None
+                if line in (b'\r\n', b'\n'):
+                    if headers: break
+                    continue
+                if b':' not in line:
+                    txt = line.decode('utf-8', errors='replace').rstrip()
+                    if txt: self._log(f"[mojo-lsp/stdout] {txt}")
+                    continue
+                k,v = line.decode('ascii', errors='replace').split(':', 1)
+                headers[k.strip().lower()] = v.strip()
+            try: n = int(headers.get('content-length', '0'))
+            except Exception:
+                self._log(f"[mojo-lsp] bad headers: {headers}")
+                continue
+            if n <= 0:
+                self._log(f"[mojo-lsp] ignoring message with content-length={n}: {headers}")
+                continue
+            body = self._read_exact(proc.stdout, n)
+            if body is None: return None
+            try: return json.loads(body.decode('utf-8'))
+            except Exception as e: self._log(f"[mojo-lsp] bad json payload: {e}")
+
+    def _read_exact(self, stream, n):
+        out = bytearray()
+        while len(out) < n:
+            chunk = stream.read(n - len(out))
+            if not chunk: return None
+            out.extend(chunk)
+        return bytes(out)
 
     def _handle_message(self, msg):
         if 'id' in msg and ('result' in msg or 'error' in msg):

@@ -97,5 +97,7 @@ tests/
 tools/
   build_server.sh        -- compile C++ binaries
   server_exec.py         -- send code to server (debugging tool)
+  explore_lsp.py         -- run LSP probes and write report to meta/
+  explore_kernel_client.py -- run jupyter-client probes and write report to meta/
   test.sh                -- run pytest
 ```
