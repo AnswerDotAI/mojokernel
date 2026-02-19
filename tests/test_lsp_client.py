@@ -223,6 +223,16 @@ class _FakeProc:
     def __init__(self, stdout): self.stdout = stdout
 
 
+class _ProcStub:
+    def __init__(self, rc=None, pid=123): self._rc,self.pid = rc,pid
+    def poll(self): return self._rc
+
+
+class _ThreadStub:
+    def __init__(self, alive=True): self._alive = alive
+    def is_alive(self): return self._alive
+
+
 def test_lsp_client_round_trip_and_restart():
     c = MojoLSPClient(cmd=_fake_lsp_cmd(), request_timeout=1.0, shutdown_timeout=0.3)
     c.start()
@@ -302,3 +312,63 @@ def test_lsp_client_read_message_handles_fragmented_body_reads():
     c._proc = _FakeProc(stdout)
     msg = c._read_message()
     assert msg == dict(jsonrpc='2.0', id=7, result=dict(ok=True))
+
+
+def test_lsp_client_complete_restarts_when_reader_dead():
+    c = MojoLSPClient(cmd=[])
+    c._proc,c._reader,c._stderr_reader = _ProcStub(),_ThreadStub(False),_ThreadStub(True)
+    restarts = []
+
+    def restart():
+        restarts.append('restart')
+        c._proc,c._reader,c._stderr_reader = _ProcStub(),_ThreadStub(True),_ThreadStub(True)
+
+    c.restart = restart
+    c._text_document_request = lambda method, text, pos, timeout=None: dict(isIncomplete=False, items=[dict(label='print', kind=3)])
+    out = c.complete('pri', 3)
+    assert completion_matches(out) == ['print']
+    assert restarts == ['restart']
+
+
+def test_lsp_client_complete_restarts_once_on_reader_stopped_error():
+    c = MojoLSPClient(cmd=[])
+    c._proc,c._reader,c._stderr_reader = _ProcStub(),_ThreadStub(True),_ThreadStub(True)
+    restarts,count = [],0
+
+    def restart():
+        restarts.append('restart')
+        c._proc,c._reader,c._stderr_reader = _ProcStub(),_ThreadStub(True),_ThreadStub(True)
+
+    def req(method, text, pos, timeout=None):
+        nonlocal count
+        count += 1
+        if count == 1: raise RuntimeError('LSP reader stopped')
+        return dict(isIncomplete=False, items=[dict(label='print', kind=3)])
+
+    c.restart = restart
+    c._text_document_request = req
+    out = c.complete('pri', 3)
+    assert completion_matches(out) == ['print']
+    assert restarts == ['restart']
+    assert count == 2
+
+
+def test_lsp_client_complete_timeout_does_not_restart():
+    c = MojoLSPClient(cmd=[])
+    c._proc,c._reader,c._stderr_reader = _ProcStub(),_ThreadStub(True),_ThreadStub(True)
+    restarts = []
+    c.restart = lambda: restarts.append('restart')
+    c._text_document_request = lambda method, text, pos, timeout=None: (_ for _ in ()).throw(TimeoutError('LSP request timed out: textDocument/completion'))
+    with pytest.raises(TimeoutError): c.complete('pri', 3)
+    assert restarts == []
+
+
+def test_lsp_client_debug_state_compact_truncates_large_fields():
+    c = MojoLSPClient(cmd=[])
+    c._proc,c._reader,c._stderr_reader = _ProcStub(),_ThreadStub(True),_ThreadStub(True)
+    c._last_reader_error = 'x' * 500
+    c._stderr_tail.extend(['a' * 300, 'b' * 300, 'c' * 300])
+    out = c.debug_state(compact=True)
+    assert len(out['last_reader_error']) <= 180
+    assert len(out['stderr_tail']) == 2
+    assert all(len(o) <= 120 for o in out['stderr_tail'])

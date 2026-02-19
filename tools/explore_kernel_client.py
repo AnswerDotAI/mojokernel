@@ -82,7 +82,6 @@ def main():
         execute_cases=[],
         completion_cases=[],
         inspect_cases=[],
-        is_complete_cases=[],
     )
 
     km = jupyter_client.KernelManager(kernel_name=args.kernel_name)
@@ -129,11 +128,6 @@ def main():
             row = dict(code=code, cursor_pos=cursor_pos)
             row.update(_request_content(lambda c=code, p=cursor_pos: kc.inspect(c, p, detail_level=0, reply=True, timeout=args.timeout)))
             report['inspect_cases'].append(row)
-
-        for code in ['', 'var x = 1', 'if True:']:
-            row = dict(code=code)
-            row.update(_request_content(lambda c=code: kc.is_complete(c, reply=True, timeout=args.timeout)))
-            report['is_complete_cases'].append(row)
     except Exception as e: report['startup'] = dict(ok=False, error=repr(e))
     finally:
         try:
@@ -150,7 +144,6 @@ def main():
         execute_ok=ok_exec,
         completion_cases=len(report['completion_cases']),
         inspect_cases=len(report['inspect_cases']),
-        is_complete_cases=len(report['is_complete_cases']),
         out=str(args.out),
     )
     _write_report(args.out, report)

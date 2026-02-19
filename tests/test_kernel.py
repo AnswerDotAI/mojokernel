@@ -173,21 +173,6 @@ class _UnfilteredLSP:
     def hover(self, text, cursor_offset): return None
 
 
-class _DeadReaderRecoverLSP(_WrapScopeOnlyLSP):
-    def __init__(self):
-        super().__init__()
-        self.restart_calls = 0
-        self.is_running = True
-        self.reader_alive = False
-
-    def restart(self):
-        self.restart_calls += 1
-        self.is_running = True
-        self.reader_alive = True
-
-    def debug_state(self): return dict(is_running=self.is_running, reader_alive=self.reader_alive, restart_calls=self.restart_calls)
-
-
 def _mk_kernel_for_lsp(lsp):
     k = MojoKernel.__new__(MojoKernel)
     k.lsp = lsp
@@ -273,11 +258,3 @@ def test_do_complete_timeout_does_not_restart_lsp():
     out = k.do_complete('var list = [2, 3, 5]\nlist.', len('var list = [2, 3, 5]\nlist.'))
     assert out.get('matches', []) == []
     assert lsp.restart_calls == 0
-
-
-def test_do_complete_restarts_when_lsp_reader_dead():
-    lsp = _DeadReaderRecoverLSP()
-    k = _mk_kernel_for_lsp(lsp)
-    out = k.do_complete('var list = [2, 3, 5]\nlist.s', len('var list = [2, 3, 5]\nlist.s'))
-    assert 'sort' in out.get('matches', [])
-    assert lsp.restart_calls == 1

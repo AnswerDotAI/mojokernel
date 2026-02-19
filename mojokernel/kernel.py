@@ -99,35 +99,9 @@ class MojoKernel(Kernel):
         d = e.args[0] if e.args else None
         return isinstance(d, dict) and d.get('code') == -32801
 
-    def _lsp_request(self, fn, what='request'):
-        try: return self._with_lsp_restart(fn, what=what)
-        except Exception as e:
-            if not self._is_outdated_lsp_error(e): raise
-            # One immediate replay handles stale completions without slow retry loops.
-            return self._with_lsp_restart(fn, what=what)
-
-    def _needs_lsp_restart(self, e):
-        if self.lsp and (not getattr(self.lsp, 'is_running', True) or not getattr(self.lsp, 'reader_alive', True)): return True
-        if not isinstance(e, RuntimeError): return False
-        s = str(e)
-        return 'LSP reader stopped' in s or 'LSP client shut down' in s
-
-    def _with_lsp_restart(self, fn, what='request'):
-        if self.lsp and (not getattr(self.lsp, 'is_running', True) or not getattr(self.lsp, 'reader_alive', True)):
-            state = self._lsp_state()
-            self.log.warning(f"LSP {what} preflight restart: {state}")
-            self.lsp.restart()
-        try: return fn()
-        except Exception as e:
-            if not self._needs_lsp_restart(e): raise
-            es = self._diag_err(e)
-            self.log.warning(f"LSP {what} restarting after error: {es}")
-            self.lsp.restart()
-            return fn()
-
     def _lsp_state(self):
         if not self.lsp: return {}
-        try: return self.lsp.debug_state()
+        try: return self.lsp.debug_state(compact=True)
         except Exception as e: return dict(error=self._diag_err(e))
 
     def _is_member_completion(self, code, cursor_pos, start):
@@ -135,17 +109,20 @@ class MojoKernel(Kernel):
         return start > 0 and code[start-1] == '.'
 
     def _lsp_complete(self, text, pos, start, end, prefix=''):
-        payload = self._lsp_request(lambda: self.lsp.complete(text, pos), what='completion')
+        try: payload = self.lsp.complete(text, pos)
+        except Exception as e:
+            if not self._is_outdated_lsp_error(e): raise
+            payload = self.lsp.complete(text, pos)
         matches = completion_matches(payload, prefix=prefix)
         typed = completion_metadata(payload, start, end, prefix=prefix)
         return matches,dict(_jupyter_types_experimental=typed) if typed else {}
 
     def _lsp_inspect(self, text, pos):
         txt = ''
-        try: txt = signature_text(self._lsp_request(lambda: self.lsp.signature_help(text, pos), what='signature'))
+        try: txt = signature_text(self.lsp.signature_help(text, pos))
         except Exception as e: self.log.debug(f"Signature help failed: {e}")
         if txt: return txt
-        try: return hover_text(self._lsp_request(lambda: self.lsp.hover(text, pos), what='hover'))
+        try: return hover_text(self.lsp.hover(text, pos))
         except Exception as e:
             self.log.debug(f"Inspect failed: {e}")
             return ''

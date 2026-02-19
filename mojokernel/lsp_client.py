@@ -231,10 +231,15 @@ class MojoLSPClient:
         self.shutdown()
         self.start()
 
-    def debug_state(self):
+    def _clip(self, s, n=220):
+        s = '' if s is None else str(s)
+        return s if len(s) <= n else s[:n-3] + '...'
+
+    def debug_state(self, compact=False):
         proc = self._proc
         with self._pending_lock: pending = len(self._pending)
-        return dict(
+        tail = list(self._stderr_tail)
+        data = dict(
             is_running=self.is_running,
             pid=self.pid,
             returncode=None if not proc else proc.poll(),
@@ -246,8 +251,31 @@ class MojoLSPClient:
             doc_len=len(self._doc_text),
             supports_did_change=self._supports_did_change,
             last_reader_error=self._last_reader_error,
-            stderr_tail=list(self._stderr_tail)[-6:],
+            stderr_tail=tail[-6:],
         )
+        if not compact: return data
+        data['last_reader_error'] = self._clip(data.get('last_reader_error', ''), 180)
+        data['stderr_tail'] = [self._clip(o, 120) for o in tail[-2:]]
+        return data
+
+    def _needs_restart(self, e=None):
+        if not self.is_running or not self.reader_alive: return True
+        if e is None or not isinstance(e, RuntimeError): return False
+        s = str(e)
+        return 'LSP reader stopped' in s or 'LSP client shut down' in s or 'LSP process not running' in s
+
+    def ensure_alive(self):
+        if not self._needs_restart(): return False
+        self.restart()
+        return True
+
+    def _request_with_restart(self, fn):
+        self.ensure_alive()
+        try: return fn()
+        except Exception as e:
+            if isinstance(e, TimeoutError) or not self._needs_restart(e): raise
+            self.restart()
+            return fn()
 
     def shutdown(self):
         proc = self._proc
@@ -322,13 +350,13 @@ class MojoLSPClient:
             return self._request(method, params, timeout=timeout)
 
     def complete(self, text, cursor_offset, timeout=None):
-        return self._text_document_request('textDocument/completion', text, cursor_offset, timeout=timeout)
+        return self._request_with_restart(lambda: self._text_document_request('textDocument/completion', text, cursor_offset, timeout=timeout))
 
     def hover(self, text, cursor_offset, timeout=None):
-        return self._text_document_request('textDocument/hover', text, cursor_offset, timeout=timeout)
+        return self._request_with_restart(lambda: self._text_document_request('textDocument/hover', text, cursor_offset, timeout=timeout))
 
     def signature_help(self, text, cursor_offset, timeout=None):
-        return self._text_document_request('textDocument/signatureHelp', text, cursor_offset, timeout=timeout)
+        return self._request_with_restart(lambda: self._text_document_request('textDocument/signatureHelp', text, cursor_offset, timeout=timeout))
 
     def _join_thread(self, t):
         if not t or t is threading.current_thread(): return
